@@ -15,14 +15,14 @@ var (
 	nacosPort       uint64
 	logLevel        string
 	autoCreatek8sNs bool
-	configScanTime  uint64
+	configScanTime  int64
 )
 
 func main() {
 	flag.StringSliceVar(&namespaces, "namespaces", nil, "namespaces need to synchronization configuration")
 	flag.StringSliceVar(&nacosIPs, "nacosIPs", nil, "nacos servers ips")
 	flag.Uint64Var(&nacosPort, "nacosPort", 8848, "nacos server port")
-	flag.Uint64Var(&configScanTime, "syncInterval", 10, "synchronization interval")
+	flag.Int64Var(&configScanTime, "configScanTime", 10, "synchronization interval")
 	flag.StringVar(&logLevel, "logLevel", "info", "log level")
 	flag.BoolVar(&autoCreatek8sNs, "autoCreatek8sNs", false, "auto create kubernetes namespace (default false)")
 	flag.Parse()

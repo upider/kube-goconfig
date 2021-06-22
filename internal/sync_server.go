@@ -3,7 +3,6 @@ package internal
 import (
 	"context"
 	"kube-goconfig/pkg"
-	"sync"
 	"time"
 
 	mapset "github.com/deckarep/golang-set"
@@ -28,7 +27,6 @@ type SyncServer struct {
 	NacosClients map[config_client.IConfigClient]mapset.Set `json:"nacosClients"`
 	K8sClientset *kubernetes.Clientset
 	SyncConfig   *SyncConfiguration
-	mutex        sync.Mutex
 }
 
 func (s *SyncServer) Start(signalController *pkg.SignalController) {
@@ -59,8 +57,7 @@ func (s *SyncServer) Start(signalController *pkg.SignalController) {
 			cancel()
 		default:
 			// sync config
-			time.Sleep(time.Duration(cfg.ConfigScanTime))
-			log.Info("sync config...\n")
+			time.Sleep(time.Second * time.Duration(cfg.ConfigScanTime))
 			for nacosClient, configs := range s.NacosClients {
 				newConfigSet := mapset.NewSet()
 
@@ -80,58 +77,49 @@ func (s *SyncServer) Start(signalController *pkg.SignalController) {
 						newConfigSet.Add(config)
 					}
 
-					if page.PagesAvailable == i {
+					// page.PagesAvailable可能为0
+					if page.PagesAvailable <= i {
 						break
 					}
 				}
 
 				if configs.Equal(newConfigSet) {
 					// 如果没有变化则不添加新的ListenConfig，也不删除ListenConfig
-					log.Info("config set has no change")
 					continue
 				}
 
 				// 添加新的ListenConfig或删除ListenConfig
-				log.Info("config set has changed")
-				interSet := configs.Intersect(newConfigSet)
+				interSet := newConfigSet.Intersect(configs)
 				deleteListenSet := configs.Difference(interSet)
 				addListenSet := newConfigSet.Difference(configs)
 
 				delIt := deleteListenSet.Iterator()
 				defer delIt.Stop()
 				for configItem := range delIt.C {
-					nacosClient.CancelListenConfig(vo.ConfigParam{
+					err := nacosClient.CancelListenConfig(vo.ConfigParam{
 						DataId: configItem.(model.ConfigItem).DataId,
 						Group:  configItem.(model.ConfigItem).Group,
 						OnChange: func(namespace, group, dataId, data string) {
 							log.Infof("cancel listen config for namespace: %s, group: %s, dataid: %s", namespace, group, dataId)
 						},
 					})
+					if err != nil {
+						log.Errorf("CancelListenConfig error: %v", err)
+					}
 				}
 
 				addIt := addListenSet.Iterator()
 				defer addIt.Stop()
-				immutable := false
 				for configItem := range addIt.C {
-					nacosClient.ListenConfig(vo.ConfigParam{
-						DataId: configItem.(model.ConfigItem).DataId,
-						Group:  configItem.(model.ConfigItem).Group,
-						OnChange: func(namespace, group, dataId, data string) {
-							log.Infof("add listen config for namespace: %s, group: %s, dataid: %s", namespace, group, dataId)
-							configMap := &corev1.ConfigMap{
-								ObjectMeta: metav1.ObjectMeta{
-									Name:      dataId,
-									Namespace: namespace,
-									Labels:    map[string]string{"group": group},
-								},
-								Immutable: &immutable,
-								Data:      map[string]string{dataId: data},
-							}
-							s.mutex.Lock()
-							s.K8sClientset.CoreV1().ConfigMaps(namespace).Create(ctx, configMap, metav1.CreateOptions{})
-							s.mutex.Unlock()
-						},
+					err := nacosClient.ListenConfig(vo.ConfigParam{
+						DataId:   configItem.(model.ConfigItem).DataId,
+						Group:    configItem.(model.ConfigItem).Group,
+						OnChange: s.configOnChange,
 					})
+
+					if err != nil {
+						log.Errorf("CancelListenConfig error: %v", err)
+					}
 				}
 
 				s.NacosClients[nacosClient] = newConfigSet
@@ -200,4 +188,36 @@ func NewSyncServer(cfg *SyncConfiguration) (Server, error) {
 	}
 
 	return &syncServer, nil
+}
+
+func (s *SyncServer) configOnChange(namespace, group, dataId, data string) {
+	ctx := context.Background()
+	immutable := false
+	log.Infof("config changed in namespace: %s, group: %s, dataid: %s", namespace, group, dataId)
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      dataId,
+			Namespace: namespace,
+			Labels:    map[string]string{"group": group},
+		},
+		Immutable: &immutable,
+		Data:      map[string]string{dataId: data},
+	}
+	_, err := s.K8sClientset.CoreV1().ConfigMaps(namespace).Get(ctx, dataId, metav1.GetOptions{})
+	if err != nil {
+		// log.Errorf("get configmap error: %v", err)
+		// 没有configmap则创建configmap
+		_, err = s.K8sClientset.CoreV1().ConfigMaps(namespace).Create(ctx, configMap, metav1.CreateOptions{})
+		if err != nil {
+			log.Errorf("create configmap error: %v", err)
+			return
+		}
+	} else {
+		// 已有configmap则更新configmap
+		_, err = s.K8sClientset.CoreV1().ConfigMaps(namespace).Update(ctx, configMap, metav1.UpdateOptions{})
+		if err != nil {
+			log.Errorf("update configmap error: %v", err)
+			return
+		}
+	}
 }

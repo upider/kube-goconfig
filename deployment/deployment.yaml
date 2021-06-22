@@ -1,0 +1,66 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-goconfig
+  namespace: kube-goconfig
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "namespaces"]
+  verbs: ["get", "list", "create", "update"]
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-goconfig
+subjects:
+- kind: ServiceAccount # May be "User", "Group" or "ServiceAccount"
+  name: kube-goconfig
+  namespace: kube-goconfig
+roleRef:
+  kind: ClusterRole
+  name: kube-goconfig
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-goconfig
+  namespace: kube-goconfig
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-goconfig
+  namespace: kube-goconfig
+spec:
+  selector:
+    matchLabels:
+      app: kube-goconfig
+  template:
+    metadata:
+      labels:
+        app: kube-goconfig
+    spec:
+      serviceAccountName: kube-goconfig
+      containers:
+      - name: kube-goconfig
+        image: 1445277435/kube-goconfig:v0.0.1
+        imagePullPolicy: IfNotPresent
+        env: 
+          - name: AUTO_CREATE_K8S_NS
+            value: "true"
+          - name: LOG_LEVEL
+            value: "info"
+          - name: NACOS_PORT
+            value: "8848"
+          - name: SYNC_INTERVAL
+            value: "10"
+          - name: NACOS_IPS
+            value: "192.168.37.204"
+          - name: NAMESPACES
+            value: "dev"

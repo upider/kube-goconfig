@@ -6,5 +6,5 @@ type SyncConfiguration struct {
 	LogLevel        string   `json:"logLevel"`
 	NacosIPs        []string `json:"nacosIPs"`
 	NacosPort       uint64   `json:"nacosPort"`
-	ConfigScanTime  uint64   `json:"configScanTime"`
+	ConfigScanTime  int64    `json:"configScanTime"`
 }
