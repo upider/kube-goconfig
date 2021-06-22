@@ -4,6 +4,7 @@ import (
 	"context"
 	"kube-goconfig/pkg"
 	"sync"
+	"time"
 
 	mapset "github.com/deckarep/golang-set"
 	"github.com/nacos-group/nacos-sdk-go/clients"
@@ -38,7 +39,10 @@ func (s *SyncServer) Start(signalController *pkg.SignalController) {
 	// sync k8s namespace
 	if cfg.AutoCreatek8sNs {
 		for _, namesapce := range cfg.SyncNamespaces {
-			ns := &corev1.Namespace{}
+			ns := &corev1.Namespace{
+				TypeMeta:   metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{Name: namesapce},
+			}
 			_, err := s.K8sClientset.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
 			if err != nil {
 				log.Error(err)
@@ -55,6 +59,8 @@ func (s *SyncServer) Start(signalController *pkg.SignalController) {
 			cancel()
 		default:
 			// sync config
+			time.Sleep(time.Duration(cfg.ConfigScanTime))
+			log.Info("sync config...\n")
 			for nacosClient, configs := range s.NacosClients {
 				newConfigSet := mapset.NewSet()
 
@@ -67,44 +73,51 @@ func (s *SyncServer) Start(signalController *pkg.SignalController) {
 						PageSize: 10,
 					})
 					if err != nil {
+						log.Error(err)
 						continue
 					}
 					for _, config := range page.PageItems {
 						newConfigSet.Add(config)
 					}
 
-					if page.PagesAvailable == 0 {
+					if page.PagesAvailable == i {
 						break
 					}
 				}
 
 				if configs.Equal(newConfigSet) {
 					// 如果没有变化则不添加新的ListenConfig，也不删除ListenConfig
+					log.Info("config set has no change")
 					continue
 				}
 
 				// 添加新的ListenConfig或删除ListenConfig
+				log.Info("config set has changed")
 				interSet := configs.Intersect(newConfigSet)
 				deleteListenSet := configs.Difference(interSet)
-				addListenSet := configs.Difference(newConfigSet)
+				addListenSet := newConfigSet.Difference(configs)
 
 				delIt := deleteListenSet.Iterator()
 				defer delIt.Stop()
-
 				for configItem := range delIt.C {
 					nacosClient.CancelListenConfig(vo.ConfigParam{
 						DataId: configItem.(model.ConfigItem).DataId,
 						Group:  configItem.(model.ConfigItem).Group,
+						OnChange: func(namespace, group, dataId, data string) {
+							log.Infof("cancel listen config for namespace: %s, group: %s, dataid: %s", namespace, group, dataId)
+						},
 					})
 				}
 
 				addIt := addListenSet.Iterator()
+				defer addIt.Stop()
 				immutable := false
 				for configItem := range addIt.C {
 					nacosClient.ListenConfig(vo.ConfigParam{
 						DataId: configItem.(model.ConfigItem).DataId,
 						Group:  configItem.(model.ConfigItem).Group,
 						OnChange: func(namespace, group, dataId, data string) {
+							log.Infof("add listen config for namespace: %s, group: %s, dataid: %s", namespace, group, dataId)
 							configMap := &corev1.ConfigMap{
 								ObjectMeta: metav1.ObjectMeta{
 									Name:      dataId,
@@ -131,8 +144,9 @@ func (s *SyncServer) Stop() {
 	log.Info("SyncServer stop...\n")
 }
 
-func NewSyncServer(cfg SyncConfiguration) (Server, error) {
+func NewSyncServer(cfg *SyncConfiguration) (Server, error) {
 	var syncServer SyncServer
+	syncServer.SyncConfig = cfg
 
 	// creates the in-cluster config
 	config, err := pkg.GetKubeConfig()
@@ -149,7 +163,7 @@ func NewSyncServer(cfg SyncConfiguration) (Server, error) {
 	// create nacos client
 	syncServer.NacosClients = make(map[config_client.IConfigClient]mapset.Set, len(cfg.SyncNamespaces))
 
-	serverConfigs := make([]constant.ServerConfig, len(cfg.NacosIPs))
+	var serverConfigs []constant.ServerConfig
 	for _, ip := range cfg.NacosIPs {
 		serverConfigs = append(serverConfigs, *constant.NewServerConfig(
 			ip,
