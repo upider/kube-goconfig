@@ -4,6 +4,14 @@
 
 replicaCount: 1
 
+env:
+  AUTO_CREATE_K8S_NS: "true"
+  LOG_LEVEL: "info"
+  NACOS_PORT: "8848"
+  CONFIG_SCAN_TIME: "10"
+  NACOS_IPS: "192.168.37.204"    #多个ip以逗号分隔
+  NAMESPACES: "dev"              #多个命名空间以逗号分隔
+
 image:
   repository: 1445277435/kube-goconfig
   pullPolicy: IfNotPresent

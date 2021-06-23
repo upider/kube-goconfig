@@ -33,18 +33,19 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          ports:
-            - name: http
-              containerPort: 80
-              protocol: TCP
-          livenessProbe:
-            httpGet:
-              path: /
-              port: http
-          readinessProbe:
-            httpGet:
-              path: /
-              port: http
+          env:
+            - name: AUTO_CREATE_K8S_NS
+              value: "{{ .Values.env.AUTO_CREATE_K8S_NS }}"
+            - name: LOG_LEVEL
+              value: "{{ .Values.env.LOG_LEVEL }}"
+            - name: NACOS_PORT
+              value: "{{ .Values.env.NACOS_PORT }}"
+            - name: CONFIG_SCAN_TIME
+              value: "{{ .Values.env.CONFIG_SCAN_TIME }}"
+            - name: NACOS_IPS
+              value: "{{ .Values.env.NACOS_IPS }}"
+            - name: NAMESPACES
+              value: "{{ .Values.env.NAMESPACES }}"
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       {{- with .Values.nodeSelector }}
