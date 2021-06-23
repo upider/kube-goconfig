@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-goconfig
+subjects:
+- kind: ServiceAccount # May be "User", "Group" or "ServiceAccount"
+  name: {{ include "kube-goconfig.serviceAccountName" . }}
+  namespace: kube-goconfig
+roleRef:
+  kind: ClusterRole
+  name: kube-goconfig
+  apiGroup: rbac.authorization.k8s.io

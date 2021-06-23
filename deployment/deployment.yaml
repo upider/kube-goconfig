@@ -64,3 +64,10 @@ spec:
             value: "192.168.37.204"
           - name: NAMESPACES
             value: "dev"
+        resources: 
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
