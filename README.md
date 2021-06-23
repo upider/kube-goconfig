@@ -34,3 +34,17 @@ C[nacos group] --> c[k8s labels: group]
    NACOS_PORT
    NAMESPACES
    ```
+
+3. 使用helm安装并运行
+
+    ```sh
+    #先修改chart/values.yaml中的值
+    #再执行命令
+    helm install {name} ./chart -f chart/values.yaml -n {namespace}
+    ```
+
+## 参考
+
+- [`nacos`](https://nacos.io/zh-cn/docs/quick-start.html)
+- [`nacos go client`](https://github.com/nacos-group/nacos-sdk-go)
+- [`k8s go client`](https://github.com/kubernetes/client-go)
