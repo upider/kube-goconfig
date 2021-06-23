@@ -9,7 +9,5 @@ RUN cd src && go build -o main cmd/main.go
 FROM centos:7
 WORKDIR /
 COPY --from=builder /workspace/src/main .
-COPY entrypoint.sh .
-RUN chmod +x entrypoint.sh
 USER 65532:65532
-ENTRYPOINT ["./entrypoint.sh"]
+ENTRYPOINT ["./main", "--autoCreatek8sNs", "$AUTO_CREATE_K8S_NS", "--logLevel", "$LOG_LEVEL", "--configScanTime", "$CONFIG_SCAN_TIME", "--nacosPort", "$NACOS_PORT", "--nacosIPs", "$NACOS_IPS", "--namespaces", "$NAMESPACES"]
