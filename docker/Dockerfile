@@ -10,4 +10,4 @@ FROM centos:7
 WORKDIR /
 COPY --from=builder /workspace/src/main .
 USER 65532:65532
-ENTRYPOINT ["./main", "--autoCreatek8sNs", "$AUTO_CREATE_K8S_NS", "--logLevel", "$LOG_LEVEL", "--configScanTime", "$CONFIG_SCAN_TIME", "--nacosPort", "$NACOS_PORT", "--nacosIPs", "$NACOS_IPS", "--namespaces", "$NAMESPACES"]
+ENTRYPOINT ./main --autoCreatek8sNs $AUTO_CREATE_K8S_NS --logLevel $LOG_LEVEL --configScanTime $CONFIG_SCAN_TIME --nacosPort $NACOS_PORT --nacosIPs $NACOS_IPS --namespaces $NAMESPACES
